@@ -4,61 +4,52 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 import logging
 
 from sqlalchemy import NullPool
-
 from app.config import settings
 
-# ======================================================================================
-# CONEXIÓN A BASE DE DATOS
-# ======================================================================================
+# app/database.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.declarative import declarative_base
+from typing import Generator
+import os
+from dotenv import load_dotenv
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(f'trap_processor_{datetime.now().strftime("%Y%m%d")}.log'),
-        logging.StreamHandler()
-    ]
+load_dotenv()
+
+# URL de conexión desde .env
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Crear engine
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,  # Verifica conexiones antes de usarlas
+    pool_size=10,        # Número de conexiones en el pool
+    max_overflow=20,     # Conexiones adicionales si se necesitan
+    echo=True            # Log de queries SQL (desactivar en producción)
 )
 
-logger = logging.getLogger(__name__)
+# Session factory
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    poolclass=NullPool,
-    future=True
-)
-
-async_session_factory = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False
-)
+# Base para los modelos
+Base = declarative_base()
 
 
-async def init_db():
-    """Inicializar la base de datos"""
+# Dependency para FastAPI
+def get_db() -> Generator[Session, None, None]:
+    """
+    Dependency que proporciona una sesión de base de datos
+    """
+    db = SessionLocal()
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(lambda _: None)
-        logger.info("✅ Conexión a base de datos establecida")
-    except Exception as e:
-        logger.error(f"❌ Error conectando a base de datos: {str(e)}")
-        raise
-
-
-@asynccontextmanager
-async def get_db_session():
-    """Context manager para obtener sesión de base de datos"""
-    session = async_session_factory()
-    try:
-        yield session
-        await session.commit()
-    except Exception as e:
-        await session.rollback()
-        logger.error(f"Error en transacción: {str(e)}")
-        raise
+        yield db
     finally:
-        await session.close()
+        db.close()
+
+
+# Función para crear todas las tablas
+def create_tables():
+    """
+    Crea todas las tablas en la base de datos
+    """
+    Base.metadata.create_all(bind=engine)
