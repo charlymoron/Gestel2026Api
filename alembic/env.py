@@ -13,6 +13,16 @@ from dotenv import load_dotenv
 from app.database import Base
 from app.models import models  # Importa todos tus modelos
 
+from app.models.models import (
+    OperadorRegistro, TipoEvento, Evento, Cliente, Provincia,
+    Edificio, Enlace, Dominio, EnlaceDominio, TipoObjeto,
+    Proveedor, Mantenedor, Objeto, TipoIdentificador,
+    IdentificadorObjeto, Estadistica, TipoEstadistica,
+    DetalleEstadistica, DetalleEstadisticaPorEnlace,
+    ArchivosImportados, OEP
+)
+
+
 load_dotenv()
 
 
