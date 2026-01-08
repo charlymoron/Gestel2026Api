@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.v1.cliente_router import cliente_router
 from app.api.v1.process_routes import process_router
 
 app = FastAPI(
@@ -9,6 +10,7 @@ app = FastAPI(
 )
 
 app.include_router(process_router)
+app.include_router(cliente_router)
 
 @app.get("/")
 async def root():

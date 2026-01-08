@@ -1,15 +1,14 @@
-
 from datetime import datetime, date
 from typing import Optional
-from sqlalchemy import String, Integer, DateTime, Date, Numeric, Boolean, ForeignKey
+from sqlalchemy import String, Integer, DateTime, Date, Numeric, Boolean, ForeignKey, Text, DECIMAL
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-# Importar Base desde database
 from app.database import Base
 
-# class Base(DeclarativeBase):
-#     pass
 
+# ============================================
+# MODELOS CORREGIDOS
+# ============================================
 
 class OperadorRegistro(Base):
     __tablename__ = "OperadorRegistro"
@@ -18,7 +17,7 @@ class OperadorRegistro(Base):
     Descripcion: Mapped[str] = mapped_column(String(150))
 
     # Relaciones
-    eventos = relationship("Evento", back_populates="operador_registro")
+    eventos = relationship("Evento", back_populates="operador_registro", lazy='noload')
 
 
 class TipoEvento(Base):
@@ -28,23 +27,7 @@ class TipoEvento(Base):
     Descripcion: Mapped[str] = mapped_column(String(200))
 
     # Relaciones
-    eventos = relationship("Evento", back_populates="tipo_evento")
-
-
-class Evento(Base):
-    __tablename__ = "Evento"
-
-    Id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    ObjetoId: Mapped[int] = mapped_column(ForeignKey("Objeto.Id"))
-    TipoEvento: Mapped[int] = mapped_column(ForeignKey("TipoEvento.Id"))
-    OperadorRegistroId: Mapped[int] = mapped_column(ForeignKey("OperadorRegistro.Id"))
-    Fecha: Mapped[datetime] = mapped_column(DateTime)
-    Observaciones: Mapped[Optional[str]] = mapped_column(String(500))
-
-    # Relaciones
-    objeto = relationship("Objeto", back_populates="eventos")
-    tipo_evento = relationship("TipoEvento", back_populates="eventos")
-    operador_registro = relationship("OperadorRegistro", back_populates="eventos")
+    eventos = relationship("Evento", back_populates="tipo_evento", lazy='noload')
 
 
 class Cliente(Base):
@@ -52,15 +35,15 @@ class Cliente(Base):
 
     Id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     RazonSocial: Mapped[str] = mapped_column(String(150))
-    Activo: Mapped[Optional[str]] = mapped_column(String(20))  # TipoActivo enum
+    Activo: Mapped[Optional[str]] = mapped_column(String(20))
     FechaDeAlta: Mapped[Optional[date]] = mapped_column(Date)
     FechaDeBaja: Mapped[Optional[date]] = mapped_column(Date)
 
-    # Relaciones
-    estadisticas = relationship("Estadistica", back_populates="cliente")
-    edificios = relationship("Edificio", back_populates="cliente")
-    tipo_estadisticas = relationship("TipoEstadistica", back_populates="cliente")
-    archivos_importados = relationship("ArchivosImportados", back_populates="cliente")
+    # Relaciones con lazy='noload' para evitar carga automática
+    estadisticas = relationship("Estadistica", back_populates="cliente", lazy='noload')
+    edificios = relationship("Edificio", back_populates="cliente", lazy='noload')
+    tipo_estadisticas = relationship("TipoEstadistica", back_populates="cliente", lazy='noload')
+    archivos_importados = relationship("ArchivosImportados", back_populates="cliente", lazy='noload')
 
 
 class Provincia(Base):
@@ -70,7 +53,7 @@ class Provincia(Base):
     Nombre: Mapped[str] = mapped_column(String(150))
 
     # Relaciones
-    edificios = relationship("Edificio", back_populates="provincia")
+    edificios = relationship("Edificio", back_populates="provincia", lazy='noload')
 
 
 class Edificio(Base):
@@ -90,9 +73,16 @@ class Edificio(Base):
     Email: Mapped[str] = mapped_column(String(200))
 
     # Relaciones
-    cliente = relationship("Cliente", back_populates="edificios")
-    provincia = relationship("Provincia", back_populates="edificios")
-    enlaces = relationship("Enlace", back_populates="edificio")
+    cliente = relationship("Cliente", back_populates="edificios", lazy='noload')
+    provincia = relationship("Provincia", back_populates="edificios", lazy='noload')
+    enlaces = relationship("Enlace", back_populates="edificio", lazy='noload')
+
+
+class Dominio(Base):
+    __tablename__ = "Dominio"
+
+    Id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    Descripcion: Mapped[str] = mapped_column(String(100))
 
 
 class Enlace(Base):
@@ -104,16 +94,19 @@ class Enlace(Base):
     EsDeRecurso: Mapped[bool] = mapped_column(default=False)
 
     # Relaciones
-    edificio = relationship("Edificio", back_populates="enlaces")
-    estadisticas = relationship("Estadistica", back_populates="enlace")
-    detalle_estadisticas = relationship("DetalleEstadisticaPorEnlace", back_populates="enlace")
-
-
-class Dominio(Base):
-    __tablename__ = "Dominio"
-
-    Id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    Descripcion: Mapped[str] = mapped_column(String(100))
+    edificio = relationship("Edificio", back_populates="enlaces", lazy='noload')
+    # CORRECCIÓN: Eliminada relación estadisticas (no hay FK directo)
+    # La relación es a través de DetalleEstadistica
+    detalle_estadisticas_por_enlace = relationship(
+        "DetalleEstadisticaPorEnlace",
+        back_populates="enlace",
+        lazy='noload'
+    )
+    detalles_estadistica = relationship(
+        "DetalleEstadistica",
+        back_populates="enlace",
+        lazy='noload'
+    )
 
 
 class EnlaceDominio(Base):
@@ -130,7 +123,7 @@ class TipoObjeto(Base):
     Nombre: Mapped[str] = mapped_column(String(40))
 
     # Relaciones
-    objetos = relationship("Objeto", back_populates="tipo_objeto")
+    objetos = relationship("Objeto", back_populates="tipo_objeto", lazy='noload')
 
 
 class Proveedor(Base):
@@ -145,7 +138,7 @@ class Proveedor(Base):
     Email: Mapped[str] = mapped_column(String(200))
 
     # Relaciones
-    objetos = relationship("Objeto", back_populates="proveedor")
+    objetos = relationship("Objeto", back_populates="proveedor", lazy='noload')
 
 
 class Mantenedor(Base):
@@ -160,7 +153,7 @@ class Mantenedor(Base):
     Email: Mapped[str] = mapped_column(String(200))
 
     # Relaciones
-    objetos = relationship("Objeto", back_populates="mantenedor")
+    objetos = relationship("Objeto", back_populates="mantenedor", lazy='noload')
 
 
 class Objeto(Base):
@@ -179,13 +172,33 @@ class Objeto(Base):
     Nombre: Mapped[str] = mapped_column(String(100))
 
     # Relaciones
-    tipo_objeto = relationship("TipoObjeto", back_populates="objetos")
-    proveedor = relationship("Proveedor", back_populates="objetos")
-    mantenedor = relationship("Mantenedor", back_populates="objetos")
-    eventos = relationship("Evento", back_populates="objeto")
-    identificadores = relationship("IdentificadorObjeto", back_populates="objeto")
-    # Self-referencing relationship para backup
-    objeto_backup = relationship("Objeto", remote_side=[Id], foreign_keys=[ObjetoBackupId])
+    tipo_objeto = relationship("TipoObjeto", back_populates="objetos", lazy='noload')
+    proveedor = relationship("Proveedor", back_populates="objetos", lazy='noload')
+    mantenedor = relationship("Mantenedor", back_populates="objetos", lazy='noload')
+    eventos = relationship("Evento", back_populates="objeto", lazy='noload')
+    identificadores = relationship("IdentificadorObjeto", back_populates="objeto", lazy='noload')
+    objeto_backup = relationship(
+        "Objeto",
+        remote_side=[Id],
+        foreign_keys=[ObjetoBackupId],
+        lazy='noload'
+    )
+
+
+class Evento(Base):
+    __tablename__ = "Evento"
+
+    Id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ObjetoId: Mapped[int] = mapped_column(ForeignKey("Objeto.Id"))
+    TipoEvento: Mapped[int] = mapped_column(ForeignKey("TipoEvento.Id"))
+    OperadorRegistroId: Mapped[int] = mapped_column(ForeignKey("OperadorRegistro.Id"))
+    Fecha: Mapped[datetime] = mapped_column(DateTime)
+    Observaciones: Mapped[Optional[str]] = mapped_column(String(500))
+
+    # Relaciones
+    objeto = relationship("Objeto", back_populates="eventos", lazy='noload')
+    tipo_evento = relationship("TipoEvento", back_populates="eventos", lazy='noload')
+    operador_registro = relationship("OperadorRegistro", back_populates="eventos", lazy='noload')
 
 
 class TipoIdentificador(Base):
@@ -196,7 +209,7 @@ class TipoIdentificador(Base):
     Observaciones: Mapped[str] = mapped_column(String(250))
 
     # Relaciones
-    identificadores = relationship("IdentificadorObjeto", back_populates="tipo_identificador")
+    identificadores = relationship("IdentificadorObjeto", back_populates="tipo_identificador", lazy='noload')
 
 
 class IdentificadorObjeto(Base):
@@ -208,8 +221,21 @@ class IdentificadorObjeto(Base):
     ValorIdentificador: Mapped[str] = mapped_column(String(100))
 
     # Relaciones
-    objeto = relationship("Objeto", back_populates="identificadores")
-    tipo_identificador = relationship("TipoIdentificador", back_populates="identificadores")
+    objeto = relationship("Objeto", back_populates="identificadores", lazy='noload')
+    tipo_identificador = relationship("TipoIdentificador", back_populates="identificadores", lazy='noload')
+
+
+class TipoEstadistica(Base):
+    __tablename__ = "TipoEstadistica"
+
+    Id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ClienteId: Mapped[int] = mapped_column(ForeignKey("Cliente.Id"))
+    Descripcion: Mapped[str] = mapped_column(String(200))
+    Observaciones: Mapped[str] = mapped_column(String(300))
+
+    # Relaciones
+    cliente = relationship("Cliente", back_populates="tipo_estadisticas", lazy='noload')
+    estadisticas = relationship("Estadistica", back_populates="tipo_estadistica", lazy='noload')
 
 
 class Estadistica(Base):
@@ -224,23 +250,14 @@ class Estadistica(Base):
     duracionExcluida: Mapped[Optional[Numeric]] = mapped_column(Numeric(9, 2))
 
     # Relaciones
-    cliente = relationship("Cliente", back_populates="estadisticas")
-    enlace = relationship("Enlace", back_populates="estadisticas")
-    tipo_estadistica = relationship("TipoEstadistica", back_populates="estadisticas")
-    detalles = relationship("DetalleEstadistica", back_populates="estadistica")
-
-
-class TipoEstadistica(Base):
-    __tablename__ = "TipoEstadistica"
-
-    Id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    ClienteId: Mapped[int] = mapped_column(ForeignKey("Cliente.Id"))
-    Descripcion: Mapped[str] = mapped_column(String(200))
-    Observaciones: Mapped[str] = mapped_column(String(300))
-
-    # Relaciones
-    cliente = relationship("Cliente", back_populates="tipo_estadisticas")
-    estadisticas = relationship("Estadistica", back_populates="tipo_estadistica")
+    cliente = relationship("Cliente", back_populates="estadisticas", lazy='noload')
+    tipo_estadistica = relationship("TipoEstadistica", back_populates="estadisticas", lazy='noload')
+    detalles = relationship("DetalleEstadistica", back_populates="estadistica", lazy='noload')
+    detalles_por_enlace = relationship(
+        "DetalleEstadisticaPorEnlace",
+        back_populates="estadistica",
+        lazy='noload'
+    )
 
 
 class DetalleEstadistica(Base):
@@ -254,7 +271,6 @@ class DetalleEstadistica(Base):
     TiempoMuertoEntreFallas: Mapped[Optional[Numeric]] = mapped_column(Numeric(9, 6))
     TiempoMuertoDelRespaldo: Mapped[Optional[Numeric]] = mapped_column(Numeric(9, 6))
     PorcentajeDisponibilidadConRespaldo: Mapped[Optional[Numeric]] = mapped_column(Numeric(9, 6))
-    TiempoMuertoDelRespaldo: Mapped[Optional[Numeric]] = mapped_column(Numeric(9, 6))
     ObjetoId: Mapped[int] = mapped_column(ForeignKey("Objeto.Id"))
     EnlaceId: Mapped[int] = mapped_column(ForeignKey("Enlace.Id"))
     TDFNeto: Mapped[Optional[Numeric]] = mapped_column(Numeric(9, 2))
@@ -263,7 +279,8 @@ class DetalleEstadistica(Base):
     TDF: Mapped[Optional[Numeric]] = mapped_column(Numeric(9, 2))
 
     # Relaciones
-    estadistica = relationship("Estadistica", back_populates="detalles")
+    estadistica = relationship("Estadistica", back_populates="detalles", lazy='noload')
+    enlace = relationship("Enlace", back_populates="detalles_estadistica", lazy='noload')
 
 
 class DetalleEstadisticaPorEnlace(Base):
@@ -280,7 +297,8 @@ class DetalleEstadisticaPorEnlace(Base):
     DisponibilidadConRespaldo: Mapped[Optional[Numeric]] = mapped_column(Numeric(9, 2))
 
     # Relaciones
-    enlace = relationship("Enlace", back_populates="detalle_estadisticas")
+    enlace = relationship("Enlace", back_populates="detalle_estadisticas_por_enlace", lazy='noload')
+    estadistica = relationship("Estadistica", back_populates="detalles_por_enlace", lazy='noload')
 
 
 class ArchivosImportados(Base):
@@ -293,7 +311,7 @@ class ArchivosImportados(Base):
     FileName: Mapped[str] = mapped_column(String(250))
 
     # Relaciones
-    cliente = relationship("Cliente", back_populates="archivos_importados")
+    cliente = relationship("Cliente", back_populates="archivos_importados", lazy='noload')
 
 
 class OEP(Base):
