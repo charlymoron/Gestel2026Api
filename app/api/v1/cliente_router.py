@@ -1,7 +1,7 @@
 # FastAPI
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, noload
 from sqlalchemy import or_, func
 
 from app.database import get_db
@@ -60,3 +60,50 @@ async def get_clientes(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener clientes: {str(e)}"
         )
+
+
+@cliente_router.get(
+    "/clientes/{cliente_id}",
+    response_model=ClienteResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener un cliente por ID",
+    description="Retorna los datos de un cliente específico (sin relaciones)"
+)
+async def get_cliente(
+        cliente_id: int,
+        db: Session = Depends(get_db)
+):
+    """
+    Obtiene un cliente específico por su ID (SOLO datos del cliente).
+
+    **Parámetros:**
+    - **cliente_id**: ID del cliente a buscar
+
+    **Retorna:**
+    - Datos del cliente (sin edificios, estadísticas, etc.)
+
+    **Errores:**
+    - 404: Cliente no encontrado
+    """
+    # Query con noload explícito
+    cliente = db.query(Cliente).options(
+        noload(Cliente.estadisticas),
+        noload(Cliente.edificios),
+        noload(Cliente.tipo_estadisticas),
+        noload(Cliente.archivos_importados)
+    ).filter(Cliente.Id == cliente_id).first()
+
+    if not cliente:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Cliente con ID {cliente_id} no encontrado"
+        )
+
+    # Retornar solo los campos del cliente
+    return {
+        "Id": cliente.Id,
+        "RazonSocial": cliente.RazonSocial,
+        "Activo": cliente.Activo,
+        "FechaDeAlta": cliente.FechaDeAlta,
+        "FechaDeBaja": cliente.FechaDeBaja
+    }
