@@ -186,3 +186,36 @@ async def get_cliente_detalle(
         response["estadisticas_count"] = len(cliente.estadisticas)
 
     return response
+
+
+@cliente_router.get(
+    "/clientes/stats/resumen",
+    summary="Estadísticas de clientes",
+    description="Retorna estadísticas generales de clientes"
+)
+async def get_clientes_stats(db: Session = Depends(get_db)):
+    """
+    Obtiene estadísticas generales de clientes (sin cargar objetos completos).
+
+    **Retorna:**
+    - Total de clientes
+    - Clientes activos
+    - Clientes inactivos
+    """
+    try:
+        # Usar func.count para no cargar objetos
+        total = db.query(func.count(Cliente.Id)).scalar()
+        activos = db.query(func.count(Cliente.Id)).filter(
+            Cliente.Activo == "1"
+        ).scalar()
+
+        return {
+            "total_clientes": total,
+            "clientes_activos": activos,
+            "clientes_inactivos": total - activos,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener estadísticas: {str(e)}"
+        )
