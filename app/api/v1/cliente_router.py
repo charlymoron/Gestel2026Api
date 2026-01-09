@@ -12,9 +12,6 @@ from app.services.cliente_service import ClienteService
 
 cliente_router = APIRouter(prefix='/clientes', tags=['Clientes'])
 
-
-
-
 @cliente_router.get("/",
     response_model=ClienteListResponse,
     status_code=status.HTTP_200_OK,

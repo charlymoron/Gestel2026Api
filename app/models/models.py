@@ -64,14 +64,17 @@ class Edificio(Base):
     ProvinciaId: Mapped[int] = mapped_column(ForeignKey("Provincia.Id"))
     Nombre: Mapped[str] = mapped_column(String(200))
     Sucursal: Mapped[str] = mapped_column(String(200))
-    Direccion: Mapped[str] = mapped_column(String(200))
-    Codigo: Mapped[str] = mapped_column(String(200))
-    Responsable: Mapped[str] = mapped_column(String(200))
-    Telefono: Mapped[str] = mapped_column(String(200))
-    Fax: Mapped[str] = mapped_column(String(200))
-    Observaciones: Mapped[str] = mapped_column(String(500))
-    Email: Mapped[str] = mapped_column(String(200))
-
+    Direccion: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True
+    )
+    Codigo: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    Responsable: Mapped[str | None]  = mapped_column(String(200), nullable=True)
+    Telefono: Mapped[str | None ] = mapped_column(String(200), nullable=True)
+    Fax: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    Observaciones: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    Email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    Ciudad : Mapped[str | None] = mapped_column(String(200), nullable=True)
     # Relaciones
     cliente = relationship("Cliente", back_populates="edificios", lazy='noload')
     provincia = relationship("Provincia", back_populates="edificios", lazy='noload')
@@ -90,8 +93,8 @@ class Enlace(Base):
 
     Id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     EdificioId: Mapped[int] = mapped_column(ForeignKey("Edificio.Id"))
-    Nombre: Mapped[str] = mapped_column(String(200))
-    EsDeRecurso: Mapped[bool] = mapped_column(default=False)
+    Referencia: Mapped[str] = mapped_column(String(200))
+    EsDeTerceros: Mapped[bool] = mapped_column(default=False)
 
     # Relaciones
     edificio = relationship("Edificio", back_populates="enlaces", lazy='noload')
