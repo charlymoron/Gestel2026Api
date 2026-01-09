@@ -107,3 +107,82 @@ async def get_cliente(
         "FechaDeAlta": cliente.FechaDeAlta,
         "FechaDeBaja": cliente.FechaDeBaja
     }
+
+
+@cliente_router.get(
+    "/clientes/{cliente_id}/detalle",
+    summary="Obtener cliente con relaciones",
+    description="Retorna un cliente CON sus relaciones (edificios, estadísticas, etc.)"
+)
+async def get_cliente_detalle(
+        cliente_id: int,
+        db: Session = Depends(get_db),
+        include_edificios: bool = Query(False, description="Incluir edificios"),
+        include_estadisticas: bool = Query(False, description="Incluir estadísticas")
+):
+    """
+    Obtiene un cliente con sus relaciones opcionales.
+
+    Usa este endpoint cuando REALMENTE necesites las relaciones.
+
+    **Parámetros:**
+    - **cliente_id**: ID del cliente
+    - **include_edificios**: Si incluir la lista de edificios
+    - **include_estadisticas**: Si incluir estadísticas
+
+    **Retorna:**
+    - Cliente con relaciones seleccionadas
+    """
+    from sqlalchemy.orm import joinedload
+
+    # Query base
+    query = db.query(Cliente)
+
+    # Cargar solo las relaciones solicitadas
+    if include_edificios:
+        query = query.options(joinedload(Cliente.edificios))
+    else:
+        query = query.options(noload(Cliente.edificios))
+
+    if include_estadisticas:
+        query = query.options(joinedload(Cliente.estadisticas))
+    else:
+        query = query.options(noload(Cliente.estadisticas))
+
+    # Siempre usar noload para las no solicitadas
+    query = query.options(
+        noload(Cliente.tipo_estadisticas),
+        noload(Cliente.archivos_importados)
+    )
+
+    cliente = query.filter(Cliente.Id == cliente_id).first()
+
+    if not cliente:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Cliente con ID {cliente_id} no encontrado"
+        )
+
+    # Construir respuesta manualmente
+    response = {
+        "Id": cliente.Id,
+        "RazonSocial": cliente.RazonSocial,
+        "Activo": cliente.Activo,
+        "FechaDeAlta": cliente.FechaDeAlta,
+        "FechaDeBaja": cliente.FechaDeBaja
+    }
+
+    if include_edificios:
+        response["edificios"] = [
+            {
+                "Id": e.Id,
+                "Nombre": e.Nombre,
+                "Direccion": e.Direccion
+            }
+            for e in cliente.edificios
+        ]
+
+    if include_estadisticas:
+        response["estadisticas_count"] = len(cliente.estadisticas)
+
+    return response
