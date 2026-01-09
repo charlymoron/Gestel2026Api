@@ -14,9 +14,9 @@ from typing import Generator
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv('./.env')
 
-# URL de conexión desde .env
+# URL de conexión desde .env_old
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Crear engine
