@@ -2,11 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import api_v1_router
-from app.api.v1.cliente_router import cliente_router
-from app.api.v1.edificio_router import edificio_router
-from app.api.v1.process_routes import process_router
-from app.api.v1.provincia_router import provincia_router
-from app.api.v1.dominio_router import dominio_router
+
 
 app = FastAPI(
     title="Trap Processor API",
@@ -24,12 +20,6 @@ app.add_middleware(
 )
 
 
-# app.include_router(cliente_router,prefix="/api/v1")
-# app.include_router(process_router, prefix="/api/v1")
-# app.include_router(cliente_router, prefix="/api/v1")
-# app.include_router(provincia_router, prefix="/api/v1")
-# app.include_router(edificio_router, prefix="/api/v1")
-#app.include_router(dominio_router, prefix="/api/v1")
 app.include_router(api_v1_router)
 
 
