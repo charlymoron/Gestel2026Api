@@ -24,4 +24,4 @@ def upgrade():
 
 def downgrade():
     # Opcional: volver al valor anterior
-    op.execute("ALTER SEQUENCE \"Provincia_Id_seq\" RESTART WITH 25")
+    op.execute("ALTER SEQUENCE \"Provincia_Id_seq\" RESTART WITH 26")
