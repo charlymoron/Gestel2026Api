@@ -7,12 +7,70 @@ from sqlalchemy import or_, func
 from app.database import get_db
 from app.models.models import Cliente
 
-from app.schemas.cliente_schema import ClienteResponse, ClienteListResponse
+from app.schemas.cliente_schema import (
+    ClienteResponse,
+    ClienteListResponse,
+    ClienteCreate,
+    ClienteUpdate,
+    ClienteStatsResponse
+)
 from app.services.cliente_service import ClienteService
 
 cliente_router = APIRouter(prefix='/clientes', tags=['Clientes'])
 
-@cliente_router.get("/",
+
+# ==================== CREATE ====================
+
+@cliente_router.post(
+    "/",
+    response_model=ClienteResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear un nuevo cliente",
+    description="Crea un nuevo cliente en el sistema"
+)
+async def create_cliente(
+        cliente_data: ClienteCreate,
+        db: Session = Depends(get_db)
+):
+    """
+    Crea un nuevo cliente.
+
+    **Parámetros:**
+    - **RazonSocial**: Nombre o razón social del cliente (requerido)
+    - **Activo**: Estado del cliente (opcional)
+    - **FechaDeAlta**: Fecha de alta (opcional)
+    - **FechaDeBaja**: No se acepta en la creación, siempre será null
+
+    **Retorna:**
+    - Cliente creado con su ID asignado
+
+    **Errores:**
+    - 400: Datos inválidos
+    - 409: Cliente con razón social duplicada (si se implementa validación)
+    - 500: Error interno del servidor
+    """
+    try:
+        service = ClienteService(db)
+        result = service.create_cliente(cliente_data)
+        return result
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al crear cliente: {str(e)}"
+        )
+
+
+# ==================== READ ====================
+
+@cliente_router.get(
+    "/",
     response_model=ClienteListResponse,
     status_code=status.HTTP_200_OK,
     summary="Obtener lista de clientes",
@@ -25,17 +83,20 @@ async def get_clientes(
         activo: Optional[str] = Query(None, description="Filtrar por estado"),
         search: Optional[str] = Query(None, description="Buscar en razón social"),
         order_by: str = Query("Id", description="Campo para ordenar"),
-        order_direction: str = Query("asc", regex="^(asc|desc)$", description="Dirección")
+        order_direction: str = Query("asc", pattern="^(asc|desc)$", description="Dirección")
 ):
     """
     Obtiene lista paginada de clientes.
 
-    El router solo se encarga de:
-    - Recibir la petición
-    - Validar parámetros (FastAPI lo hace automáticamente)
-    - Llamar al servicio
-    - Retornar respuesta o error
+    **Filtro Activo**: Usar "S" para activos o "N" para inactivos
     """
+    # Validar que activo sea S o N si se proporciona
+    if activo is not None and activo not in ["S", "N"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='El parámetro activo debe ser "S" o "N"'
+        )
+
     try:
         service = ClienteService(db)
         result = service.get_clientes(
@@ -60,7 +121,7 @@ async def get_clientes(
 
 
 @cliente_router.get(
-    "/clientes/{cliente_id}",
+    "/{cliente_id}",
     response_model=ClienteResponse,
     status_code=status.HTTP_200_OK,
     summary="Obtener un cliente por ID",
@@ -71,24 +132,10 @@ async def get_cliente(
         db: Session = Depends(get_db)
 ):
     """
-    Obtiene un cliente específico por su ID (SOLO datos del cliente).
-
-    **Parámetros:**
-    - **cliente_id**: ID del cliente a buscar
-
-    **Retorna:**
-    - Datos del cliente (sin edificios, estadísticas, etc.)
-
-    **Errores:**
-    - 404: Cliente no encontrado
+    Obtiene un cliente específico por su ID.
     """
-    # Query con noload explícito
-    cliente = db.query(Cliente).options(
-        noload(Cliente.estadisticas),
-        noload(Cliente.edificios),
-        noload(Cliente.tipo_estadisticas),
-        noload(Cliente.archivos_importados)
-    ).filter(Cliente.Id == cliente_id).first()
+    service = ClienteService(db)
+    cliente = service.get_cliente(cliente_id)
 
     if not cliente:
         raise HTTPException(
@@ -96,123 +143,141 @@ async def get_cliente(
             detail=f"Cliente con ID {cliente_id} no encontrado"
         )
 
-    # Retornar solo los campos del cliente
-    return {
-        "Id": cliente.Id,
-        "RazonSocial": cliente.RazonSocial,
-        "Activo": cliente.Activo,
-        "FechaDeAlta": cliente.FechaDeAlta,
-        "FechaDeBaja": cliente.FechaDeBaja
-    }
+    return cliente
 
 
 @cliente_router.get(
-    "/clientes/{cliente_id}/detalle",
-    summary="Obtener cliente con relaciones",
-    description="Retorna un cliente CON sus relaciones (edificios, estadísticas, etc.)"
-)
-async def get_cliente_detalle(
-        cliente_id: int,
-        db: Session = Depends(get_db),
-        include_edificios: bool = Query(False, description="Incluir edificios"),
-        include_estadisticas: bool = Query(False, description="Incluir estadísticas")
-):
-    """
-    Obtiene un cliente con sus relaciones opcionales.
-
-    Usa este endpoint cuando REALMENTE necesites las relaciones.
-
-    **Parámetros:**
-    - **cliente_id**: ID del cliente
-    - **include_edificios**: Si incluir la lista de edificios
-    - **include_estadisticas**: Si incluir estadísticas
-
-    **Retorna:**
-    - Cliente con relaciones seleccionadas
-    """
-    from sqlalchemy.orm import joinedload
-
-    # Query base
-    query = db.query(Cliente)
-
-    # Cargar solo las relaciones solicitadas
-    if include_edificios:
-        query = query.options(joinedload(Cliente.edificios))
-    else:
-        query = query.options(noload(Cliente.edificios))
-
-    if include_estadisticas:
-        query = query.options(joinedload(Cliente.estadisticas))
-    else:
-        query = query.options(noload(Cliente.estadisticas))
-
-    # Siempre usar noload para las no solicitadas
-    query = query.options(
-        noload(Cliente.tipo_estadisticas),
-        noload(Cliente.archivos_importados)
-    )
-
-    cliente = query.filter(Cliente.Id == cliente_id).first()
-
-    if not cliente:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Cliente con ID {cliente_id} no encontrado"
-        )
-
-    # Construir respuesta manualmente
-    response = {
-        "Id": cliente.Id,
-        "RazonSocial": cliente.RazonSocial,
-        "Activo": cliente.Activo,
-        "FechaDeAlta": cliente.FechaDeAlta,
-        "FechaDeBaja": cliente.FechaDeBaja
-    }
-
-    if include_edificios:
-        response["edificios"] = [
-            {
-                "Id": e.Id,
-                "Nombre": e.Nombre,
-                "Direccion": e.Direccion
-            }
-            for e in cliente.edificios
-        ]
-
-    if include_estadisticas:
-        response["estadisticas_count"] = len(cliente.estadisticas)
-
-    return response
-
-
-@cliente_router.get(
-    "/clientes/stats/resumen",
+    "/stats/resumen",
+    response_model=ClienteStatsResponse,
     summary="Estadísticas de clientes",
     description="Retorna estadísticas generales de clientes"
 )
 async def get_clientes_stats(db: Session = Depends(get_db)):
     """
-    Obtiene estadísticas generales de clientes (sin cargar objetos completos).
-
-    **Retorna:**
-    - Total de clientes
-    - Clientes activos
-    - Clientes inactivos
+    Obtiene estadísticas generales de clientes.
     """
     try:
-        # Usar func.count para no cargar objetos
-        total = db.query(func.count(Cliente.Id)).scalar()
-        activos = db.query(func.count(Cliente.Id)).filter(
-            Cliente.Activo == "1"
-        ).scalar()
-
-        return {
-            "total_clientes": total,
-            "clientes_activos": activos,
-            "clientes_inactivos": total - activos,
-        }
+        service = ClienteService(db)
+        return service.get_stats()
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener estadísticas: {str(e)}"
+        )
+
+
+# ==================== UPDATE ====================
+
+@cliente_router.put(
+    "/{cliente_id}",
+    response_model=ClienteResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Actualizar un cliente",
+    description="Actualiza los datos de un cliente existente"
+)
+async def update_cliente(
+        cliente_id: int,
+        cliente_data: ClienteUpdate,
+        db: Session = Depends(get_db)
+):
+    """
+    Actualiza un cliente existente.
+
+    **Parámetros:**
+    - **cliente_id**: ID del cliente a actualizar
+    - Solo se actualizarán los campos proporcionados (no nulos)
+
+    **Retorna:**
+    - Cliente actualizado
+
+    **Errores:**
+    - 404: Cliente no encontrado
+    - 400: Datos inválidos
+    - 500: Error interno del servidor
+    """
+    try:
+        service = ClienteService(db)
+        result = service.update_cliente(cliente_id, cliente_data)
+
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Cliente con ID {cliente_id} no encontrado"
+            )
+
+        return result
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al actualizar cliente: {str(e)}"
+        )
+
+
+# ==================== DELETE ====================
+
+@cliente_router.delete(
+    "/{cliente_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar un cliente",
+    description="Elimina un cliente del sistema"
+)
+async def delete_cliente(
+        cliente_id: int,
+        db: Session = Depends(get_db)
+):
+    """
+    Elimina un cliente.
+
+    **Parámetros:**
+    - **cliente_id**: ID del cliente a eliminar
+
+    **Retorna:**
+    - 204: Cliente eliminado exitosamente
+
+    **Errores:**
+    - 404: Cliente no encontrado
+    - 409: Cliente tiene relaciones que impiden su eliminación
+    - 500: Error interno del servidor
+    """
+    try:
+        service = ClienteService(db)
+
+        # Verificar si tiene edificios asociados (validación de negocio)
+        cliente = service.get_cliente(cliente_id)
+        if not cliente:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Cliente con ID {cliente_id} no encontrado"
+            )
+
+        # Intentar eliminar
+        deleted = service.delete_cliente(cliente_id)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Cliente con ID {cliente_id} no encontrado"
+            )
+
+        return None
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Capturar errores de integridad referencial
+        if "foreign key" in str(e).lower() or "constraint" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No se puede eliminar el cliente porque tiene registros asociados"
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al eliminar cliente: {str(e)}"
         )

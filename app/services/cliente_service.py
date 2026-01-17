@@ -2,7 +2,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
 from app.repositories.cliente_repository import ClienteRepository
-from app.schemas.cliente_schema  import (
+from app.schemas.cliente_schema import (
     ClienteCreate, ClienteUpdate, ClienteResponse,
     ClienteListResponse
 )
@@ -16,6 +16,36 @@ class ClienteService:
 
     def __init__(self, db: Session):
         self.repository = ClienteRepository(db)
+
+    @staticmethod
+    def _transform_activo_to_db(activo: Optional[str]) -> Optional[str]:
+        """
+        Transforma el valor de Activo del frontend (S/N) a base de datos (1/0).
+
+        Args:
+            activo: Valor del frontend ("S" o "N")
+
+        Returns:
+            Valor para la BD ("1" o "0")
+        """
+        if activo is None:
+            return None
+        return "1" if activo == "S" else "0"
+
+    @staticmethod
+    def _transform_activo_from_db(activo: Optional[str]) -> Optional[str]:
+        """
+        Transforma el valor de Activo de la base de datos (1/0) al frontend (S/N).
+
+        Args:
+            activo: Valor de la BD ("1" o "0")
+
+        Returns:
+            Valor para el frontend ("S" o "N")
+        """
+        if activo is None:
+            return None
+        return "S" if activo == "1" else "N"
 
     def get_cliente(self, cliente_id: int) -> Optional[Dict[str, Any]]:
         """
@@ -34,7 +64,7 @@ class ClienteService:
         return {
             "Id": cliente.Id,
             "RazonSocial": cliente.RazonSocial,
-            "Activo": cliente.Activo,
+            "Activo": self._transform_activo_from_db(cliente.Activo),
             "FechaDeAlta": cliente.FechaDeAlta,
             "FechaDeBaja": cliente.FechaDeBaja
         }
@@ -54,7 +84,7 @@ class ClienteService:
         Args:
             page: Número de página
             page_size: Tamaño de página
-            activo: Filtro por estado
+            activo: Filtro por estado (S/N desde frontend)
             search: Búsqueda en razón social
             order_by: Campo para ordenar
             order_direction: Dirección del ordenamiento
@@ -70,24 +100,27 @@ class ClienteService:
 
         skip = (page - 1) * page_size
 
+        # Transformar filtro activo para la BD
+        activo_db = self._transform_activo_to_db(activo) if activo else None
+
         # Obtener datos del repositorio
         clientes = self.repository.get_all(
             skip=skip,
             limit=page_size,
-            activo=activo,
+            activo=activo_db,
             search=search,
             order_by=order_by,
             order_direction=order_direction
         )
 
-        total = self.repository.count(activo=activo, search=search)
+        total = self.repository.count(activo=activo_db, search=search)
 
-        # Transformar a diccionarios
+        # Transformar a diccionarios con Activo en formato S/N
         clientes_data = [
             {
                 "Id": cliente.Id,
                 "RazonSocial": cliente.RazonSocial,
-                "Activo": cliente.Activo,
+                "Activo": self._transform_activo_from_db(cliente.Activo),
                 "FechaDeAlta": cliente.FechaDeAlta,
                 "FechaDeBaja": cliente.FechaDeBaja
             }
@@ -111,15 +144,23 @@ class ClienteService:
         Returns:
             Cliente creado
         """
-        # Aquí puedes agregar validaciones de negocio
-        # Por ejemplo: validar que la razón social no esté duplicada
+        # Convertir a dict
+        cliente_dict = cliente_data.model_dump()
 
-        cliente = self.repository.create(cliente_data.model_dump())
+        # Transformar Activo de S/N a 1/0
+        if cliente_dict.get('Activo'):
+            cliente_dict['Activo'] = self._transform_activo_to_db(cliente_dict['Activo'])
+
+        # FechaDeBaja siempre es None en creación
+        cliente_dict['FechaDeBaja'] = None
+
+        # Crear cliente
+        cliente = self.repository.create(cliente_dict)
 
         return {
             "Id": cliente.Id,
             "RazonSocial": cliente.RazonSocial,
-            "Activo": cliente.Activo,
+            "Activo": self._transform_activo_from_db(cliente.Activo),
             "FechaDeAlta": cliente.FechaDeAlta,
             "FechaDeBaja": cliente.FechaDeBaja
         }
@@ -146,6 +187,10 @@ class ClienteService:
         # Solo actualizar campos que no son None
         update_data = cliente_data.model_dump(exclude_unset=True)
 
+        # Transformar Activo de S/N a 1/0 si está presente
+        if 'Activo' in update_data and update_data['Activo'] is not None:
+            update_data['Activo'] = self._transform_activo_to_db(update_data['Activo'])
+
         cliente = self.repository.update(cliente_id, update_data)
         if not cliente:
             return None
@@ -153,7 +198,7 @@ class ClienteService:
         return {
             "Id": cliente.Id,
             "RazonSocial": cliente.RazonSocial,
-            "Activo": cliente.Activo,
+            "Activo": self._transform_activo_from_db(cliente.Activo),
             "FechaDeAlta": cliente.FechaDeAlta,
             "FechaDeBaja": cliente.FechaDeBaja
         }
@@ -168,9 +213,6 @@ class ClienteService:
         Returns:
             True si se eliminó, False si no
         """
-        # Aquí puedes agregar validaciones de negocio
-        # Por ejemplo: verificar que no tenga edificios asociados
-
         return self.repository.delete(cliente_id)
 
     def get_stats(self) -> Dict[str, int]:
@@ -181,4 +223,3 @@ class ClienteService:
             Diccionario con estadísticas
         """
         return self.repository.get_stats()
-

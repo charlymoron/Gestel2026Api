@@ -46,7 +46,7 @@ class ClienteRepository:
         Args:
             skip: Registros a saltar (offset)
             limit: Cantidad máxima de registros
-            activo: Filtro por estado activo
+            activo: Filtro por estado activo (ya transformado: "1" o "0")
             search: Búsqueda en razón social
             order_by: Campo para ordenar
             order_direction: Dirección del ordenamiento (asc/desc)
@@ -87,7 +87,7 @@ class ClienteRepository:
         Cuenta el total de clientes con filtros aplicados.
 
         Args:
-            activo: Filtro por estado activo
+            activo: Filtro por estado activo (ya transformado: "1" o "0")
             search: Búsqueda en razón social
 
         Returns:
@@ -110,6 +110,7 @@ class ClienteRepository:
 
         Args:
             cliente_data: Diccionario con datos del cliente
+                         (Activo ya debe venir transformado como "1" o "0")
 
         Returns:
             Cliente creado
@@ -127,6 +128,7 @@ class ClienteRepository:
         Args:
             cliente_id: ID del cliente
             cliente_data: Diccionario con datos a actualizar
+                         (Activo ya debe venir transformado como "1" o "0")
 
         Returns:
             Cliente actualizado o None si no existe
@@ -170,7 +172,7 @@ class ClienteRepository:
         """
         total = self.db.query(func.count(Cliente.Id)).scalar()
         activos = self.db.query(func.count(Cliente.Id)).filter(
-            Cliente.Activo == "Activo"
+            Cliente.Activo == "1"
         ).scalar()
 
         return {
@@ -192,4 +194,3 @@ class ClienteRepository:
         return self.db.query(
             self.db.query(Cliente).filter(Cliente.Id == cliente_id).exists()
         ).scalar()
-
