@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.api.v1.cliente_router import cliente_router
+from app.api.v1.edificio_router import edificio_router
 from app.api.v1.process_routes import process_router
 from app.api.v1.provincia_router import provincia_router
 
@@ -14,6 +15,7 @@ app.include_router(process_router, prefix="/api/v1")
 app.include_router(cliente_router, prefix="/api/v1")
 
 app.include_router(provincia_router, prefix="/api/v1")
+app.include_router(edificio_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
