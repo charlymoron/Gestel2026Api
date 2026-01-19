@@ -1,14 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.middleware.logging_middleware import LoggingMiddleware
+import logging
+
 
 from app.api.v1 import api_v1_router
 
-
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 app = FastAPI(
     title="Trap Processor API",
     description="API para procesar archivos de traps de telecomunicaciones",
     version="1.0.0",
 )
+
+# Agregar middleware de logging
+app.add_middleware(LoggingMiddleware)
 
 # Opcional: CORS si tenés frontend
 app.add_middleware(
