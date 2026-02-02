@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 
 from app.repositories.enlace_repository import EnlaceRepository
@@ -67,6 +67,7 @@ class EnlaceService:
             page: int = 1,
             page_size: int = 10,
             edificio_id: Optional[int] = None,
+            edificio_ids: Optional[List[int]] = None,
             es_de_terceros: Optional[bool] = None,
             search: Optional[str] = None,
             order_by: str = "Id",
@@ -78,7 +79,8 @@ class EnlaceService:
         Args:
             page: Número de página
             page_size: Tamaño de página
-            edificio_id: Filtro por edificio
+            edificio_id: Filtro por edificio único
+            edificio_ids: Filtro por múltiples edificios
             es_de_terceros: Filtro por tipo (True/False)
             search: Búsqueda en referencia
             order_by: Campo para ordenar
@@ -100,6 +102,7 @@ class EnlaceService:
             skip=skip,
             limit=page_size,
             edificio_id=edificio_id,
+            edificio_ids=edificio_ids,
             es_de_terceros=es_de_terceros,
             search=search,
             order_by=order_by,
@@ -108,6 +111,7 @@ class EnlaceService:
 
         total = self.repository.count(
             edificio_id=edificio_id,
+            edificio_ids=edificio_ids,
             es_de_terceros=es_de_terceros,
             search=search
         )
@@ -203,6 +207,81 @@ class EnlaceService:
         # La validación de objetos y estadísticas se manejará por integridad referencial
         return self.repository.delete(enlace_id)
 
+    def get_enlaces_por_cliente(
+            self,
+            cliente_id: int,
+            page: int = 1,
+            page_size: int = 10,
+            es_de_terceros: Optional[bool] = None,
+            search: Optional[str] = None,
+            order_by: str = "Id",
+            order_direction: str = "asc"
+    ) -> Dict[str, Any]:
+        """
+        Obtiene enlaces de todos los edificios de un cliente específico.
+
+        Args:
+            cliente_id: ID del cliente
+            page: Número de página
+            page_size: Tamaño de página
+            es_de_terceros: Filtro por tipo (True/False)
+            search: Búsqueda en referencia
+            order_by: Campo para ordenar
+            order_direction: Dirección del ordenamiento
+
+        Returns:
+            Diccionario con datos paginados
+
+        Raises:
+            ValueError: Si el cliente no existe o no tiene edificios
+        """
+        # Validaciones de negocio
+        if page < 1:
+            page = 1
+        if page_size < 1 or page_size > 100:
+            page_size = 10
+
+        skip = (page - 1) * page_size
+
+        # Obtener IDs de edificios del cliente
+        print(f"DEBUG SERVICE: Obteniendo edificios para cliente_id={cliente_id}")
+        edificio_ids = self.repository.get_edificios_por_cliente(cliente_id)
+        print(f"DEBUG SERVICE: Edificio IDs obtenidos: {edificio_ids}")
+        
+        if not edificio_ids:
+            print(f"DEBUG SERVICE: Cliente {cliente_id} no tiene edificios")
+            raise ValueError(f"El cliente con ID {cliente_id} no tiene edificios registrados")
+
+        # Obtener datos del repositorio filtrando por los IDs de edificios
+        enlaces = self.repository.get_all(
+            skip=skip,
+            limit=page_size,
+            edificio_ids=edificio_ids,
+            es_de_terceros=es_de_terceros,
+            search=search,
+            order_by=order_by,
+            order_direction=order_direction
+        )
+
+        total = self.repository.count(
+            edificio_ids=edificio_ids,
+            es_de_terceros=es_de_terceros,
+            search=search
+        )
+
+        # Transformar a diccionarios
+        enlaces_data = [
+            self._enlace_to_dict(enlace)
+            for enlace in enlaces
+        ]
+
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "data": enlaces_data
+        }
+
     def get_stats(self) -> Dict[str, Any]:
         """
         Obtiene estadísticas de enlaces.
@@ -211,3 +290,15 @@ class EnlaceService:
             Diccionario con estadísticas
         """
         return self.repository.get_stats()
+
+    def get_stats_por_cliente(self, cliente_id: int) -> Dict[str, Any]:
+        """
+        Obtiene estadísticas de enlaces para un cliente específico.
+
+        Args:
+            cliente_id: ID del cliente
+
+        Returns:
+            Diccionario con estadísticas del cliente
+        """
+        return self.repository.get_stats_por_cliente(cliente_id)

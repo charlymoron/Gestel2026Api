@@ -224,3 +224,15 @@ class EdificioService:
             Diccionario con estadísticas
         """
         return self.repository.get_stats()
+
+    def get_stats_por_cliente(self, cliente_id: int) -> Dict[str, Any]:
+        """
+        Obtiene estadísticas de edificios para un cliente específico.
+
+        Args:
+            cliente_id: ID del cliente
+
+        Returns:
+            Diccionario con estadísticas del cliente
+        """
+        return self.repository.get_stats_por_cliente(cliente_id)

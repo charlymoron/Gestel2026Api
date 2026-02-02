@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -74,6 +74,7 @@ async def get_enlaces(
         page: int = Query(1, ge=1, description="Número de página"),
         page_size: int = Query(10, ge=1, le=100, description="Registros por página"),
         edificio_id: Optional[int] = Query(None, description="Filtrar por edificio"),
+        edificio_ids: Optional[str] = Query(None, description="Filtrar por múltiples edificios (separados por coma)"),
         es_de_terceros: Optional[bool] = Query(None, description="Filtrar por tipo (propios/terceros)"),
         search: Optional[str] = Query(None, description="Buscar en referencia"),
         order_by: str = Query("Id", description="Campo para ordenar"),
@@ -86,6 +87,7 @@ async def get_enlaces(
     - **page**: Número de página (mínimo 1)
     - **page_size**: Cantidad de registros por página (1-100)
     - **edificio_id**: Filtrar enlaces de un edificio específico
+    - **edificio_ids**: Filtrar enlaces de múltiples edificios (IDs separados por coma)
     - **es_de_terceros**: true = solo terceros, false = solo propios
     - **search**: Texto para buscar en la referencia
     - **order_by**: Campo por el cual ordenar
@@ -93,10 +95,162 @@ async def get_enlaces(
     """
     try:
         service = EnlaceService(db)
+        
+        # Convertir edificio_ids a lista si existe
+        edificio_ids_list = None
+        if edificio_ids:
+            try:
+                edificio_ids_list = [int(id.strip()) for id in edificio_ids.split(',') if id.strip().isdigit()]
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="edificio_ids debe contener números separados por coma"
+                )
+
         result = service.get_enlaces(
             page=page,
             page_size=page_size,
             edificio_id=edificio_id,
+            edificio_ids=edificio_ids_list,
+            es_de_terceros=es_de_terceros,
+            search=search,
+            order_by=order_by,
+            order_direction=order_direction
+        )
+        return result
+    except AttributeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Campo de ordenamiento inválido: {order_by}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener enlaces: {str(e)}"
+        )
+
+
+@enlace_router.get(
+    "/por-cliente/{cliente_id}",
+    response_model=EnlaceListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener enlaces por cliente",
+    description="Retorna enlaces de todos los edificios pertenecientes a un cliente específico"
+)
+async def get_enlaces_por_cliente(
+        cliente_id: int,
+        db: Session = Depends(get_db),
+        page: int = Query(1, ge=1, description="Número de página"),
+        page_size: int = Query(10, ge=1, le=100, description="Registros por página"),
+        es_de_terceros: Optional[bool] = Query(None, description="Filtrar por tipo (propios/terceros)"),
+        search: Optional[str] = Query(None, description="Buscar en referencia"),
+        order_by: str = Query("Id", description="Campo para ordenar"),
+        order_direction: str = Query("asc", pattern="^(asc|desc)$", description="Dirección")
+):
+    print(f"DEBUG ROUTER: Recibida solicitud para cliente_id={cliente_id}")
+    
+    try:
+        print(f"DEBUG ROUTER: Procesando cliente_id={cliente_id}")
+        service = EnlaceService(db)
+        result = service.get_enlaces_por_cliente(
+            cliente_id=cliente_id,
+            page=page,
+            page_size=page_size,
+            es_de_terceros=es_de_terceros,
+            search=search,
+            order_by=order_by,
+            order_direction=order_direction
+        )
+        print(f"DEBUG ROUTER: Resultado para cliente_id={cliente_id}: {result}")
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener enlaces del cliente: {str(e)}"
+        )
+    """
+    Obtiene enlaces de todos los edificios de un cliente específico.
+
+    **Parámetros:**
+    - **cliente_id**: ID del cliente para filtrar sus edificios y enlaces
+    - **page**: Número de página (mínimo 1)
+    - **page_size**: Cantidad de registros por página (1-100)
+    - **es_de_terceros**: true = solo terceros, false = solo propios
+    - **search**: Texto para buscar en la referencia
+    - **order_by**: Campo por el cual ordenar
+    - **order_direction**: Dirección del ordenamiento (asc, desc)
+
+    **Retorna:**
+    - Lista paginada de enlaces de los edificios del cliente
+
+    **Errores:**
+    - 404: Cliente no encontrado o no tiene edificios
+    - 500: Error interno del servidor
+    """
+    try:
+        print(f"DEBUG ROUTER: Procesando cliente_id={cliente_id}")
+        service = EnlaceService(db)
+        result = service.get_enlaces_por_cliente(
+            cliente_id=cliente_id,
+            page=page,
+            page_size=page_size,
+            es_de_terceros=es_de_terceros,
+            search=search,
+            order_by=order_by,
+            order_direction=order_direction
+        )
+        print(f"DEBUG ROUTER: Resultado para cliente_id={cliente_id}: {result}")
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener enlaces del cliente: {str(e)}"
+        )
+    """
+    Obtiene lista paginada de enlaces.
+
+    **Parámetros de búsqueda:**
+    - **page**: Número de página (mínimo 1)
+    - **page_size**: Cantidad de registros por página (1-100)
+    - **edificio_id**: Filtrar enlaces de un edificio específico
+    - **edificio_ids**: Filtrar enlaces de múltiples edificios (IDs separados por coma)
+    - **es_de_terceros**: true = solo terceros, false = solo propios
+    - **search**: Texto para buscar en la referencia
+    - **order_by**: Campo por el cual ordenar
+    - **order_direction**: Dirección del ordenamiento (asc, desc)
+    """
+    try:
+        service = EnlaceService(db)
+        # Convertir edificio_ids a lista si existe
+        edificio_ids_list = None
+        if edificio_ids:
+            try:
+                edificio_ids_list = [int(id.strip()) for id in edificio_ids.split(',') if id.strip().isdigit()]
+                print(f"DEBUG: edificio_ids recibido: {edificio_ids}")
+                print(f"DEBUG: edificio_ids procesado: {edificio_ids_list}")
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="edificio_ids debe contener números separados por coma"
+                )
+
+        print(f"DEBUG: Parámetros recibidos - page={page}, page_size={page_size}, edificio_id={edificio_id}, edificio_ids_list={edificio_ids_list}")
+
+        result = service.get_enlaces(
+            page=page,
+            page_size=page_size,
+            edificio_id=edificio_id,
+            edificio_ids=edificio_ids_list,
             es_de_terceros=es_de_terceros,
             search=search,
             order_by=order_by,
@@ -172,6 +326,47 @@ async def get_enlaces_stats(db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener estadísticas: {str(e)}"
+        )
+
+
+@enlace_router.get(
+    "/stats/por-cliente/{cliente_id}",
+    response_model=EnlaceStatsResponse,
+    summary="Estadísticas de enlaces por cliente",
+    description="Retorna estadísticas de enlaces de un cliente específico"
+)
+async def get_enlaces_stats_por_cliente(
+        cliente_id: int,
+        db: Session = Depends(get_db)
+):
+    """
+    Obtiene estadísticas de enlaces de un cliente específico.
+
+    **Parámetros:**
+    - **cliente_id**: ID del cliente
+
+    **Retorna:**
+    - Estadísticas de enlaces solo de los edificios del cliente
+
+    **Errores:**
+    - 404: Cliente no encontrado o no tiene edificios
+    - 500: Error interno del servidor
+    """
+    try:
+        print(f"DEBUG ROUTER: Obteniendo estadísticas para cliente_id={cliente_id}")
+        service = EnlaceService(db)
+        result = service.get_stats_por_cliente(cliente_id)
+        print(f"DEBUG ROUTER: Resultado para cliente_id={cliente_id}: {result}")
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener estadísticas del cliente: {str(e)}"
         )
 
 

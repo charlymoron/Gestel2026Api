@@ -233,6 +233,44 @@ class EdificioRepository:
             "edificios_sin_email": (total or 0) - (con_email or 0)
         }
 
+    def get_stats_por_cliente(self, cliente_id: int) -> Dict[str, Any]:
+        """
+        Obtiene estadísticas de edificios para un cliente específico.
+
+        Args:
+            cliente_id: ID del cliente
+
+        Returns:
+            Diccionario con estadísticas del cliente
+        """
+        total = self.db.query(func.count(Edificio.Id)).filter(
+            Edificio.ClienteId == cliente_id
+        ).scalar()
+
+        # Edificios por provincia para este cliente
+        edificios_por_provincia = dict(
+            self.db.query(Provincia.Nombre, func.count(Edificio.Id))
+            .join(Edificio, Provincia.Id == Edificio.ProvinciaId)
+            .filter(Edificio.ClienteId == cliente_id)
+            .group_by(Provincia.Nombre)
+            .all()
+        )
+
+        # Edificios con/sin email para este cliente
+        con_email = self.db.query(func.count(Edificio.Id)).filter(
+            Edificio.ClienteId == cliente_id,
+            Edificio.Email.isnot(None),
+            Edificio.Email != ""
+        ).scalar()
+
+        return {
+            "total_edificios": total or 0,
+            "edificios_por_cliente": {},  # Vacío para stats por cliente específico
+            "edificios_por_provincia": edificios_por_provincia,
+            "edificios_con_email": con_email or 0,
+            "edificios_sin_email": (total or 0) - (con_email or 0)
+        }
+
     def exists(self, edificio_id: int) -> bool:
         """
         Verifica si existe un edificio.

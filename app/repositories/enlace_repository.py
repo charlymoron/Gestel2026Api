@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session, joinedload, noload
-from sqlalchemy import func
+from sqlalchemy import func, and_
 
 from app.models.models import Enlace, Edificio, Cliente
 
@@ -47,6 +47,7 @@ class EnlaceRepository:
             skip: int = 0,
             limit: int = 10,
             edificio_id: Optional[int] = None,
+            edificio_ids: Optional[List[int]] = None,
             es_de_terceros: Optional[bool] = None,
             search: Optional[str] = None,
             order_by: str = "Id",
@@ -58,7 +59,8 @@ class EnlaceRepository:
         Args:
             skip: Registros a saltar (offset)
             limit: Cantidad máxima de registros
-            edificio_id: Filtro por edificio
+            edificio_id: Filtro por edificio único
+            edificio_ids: Filtro por múltiples edificios
             es_de_terceros: Filtro por tipo (propios/terceros)
             search: Búsqueda en referencia
             order_by: Campo para ordenar
@@ -76,6 +78,11 @@ class EnlaceRepository:
         # Filtros
         if edificio_id is not None:
             query = query.filter(Enlace.EdificioId == edificio_id)
+            print(f"DEBUG: Filtrando por edificio_id={edificio_id}")
+        
+        if edificio_ids is not None and len(edificio_ids) > 0:
+            query = query.filter(Enlace.EdificioId.in_(edificio_ids))
+            print(f"DEBUG: Filtrando por edificio_ids={edificio_ids}")
 
         if es_de_terceros is not None:
             query = query.filter(Enlace.EsDeTerceros == es_de_terceros)
@@ -96,6 +103,7 @@ class EnlaceRepository:
     def count(
             self,
             edificio_id: Optional[int] = None,
+            edificio_ids: Optional[List[int]] = None,
             es_de_terceros: Optional[bool] = None,
             search: Optional[str] = None
     ) -> int:
@@ -103,7 +111,8 @@ class EnlaceRepository:
         Cuenta el total de enlaces con filtros aplicados.
 
         Args:
-            edificio_id: Filtro por edificio
+            edificio_id: Filtro por edificio único
+            edificio_ids: Filtro por múltiples edificios
             es_de_terceros: Filtro por tipo
             search: Búsqueda en referencia
 
@@ -114,6 +123,10 @@ class EnlaceRepository:
 
         if edificio_id is not None:
             query = query.filter(Enlace.EdificioId == edificio_id)
+            print(f"DEBUG: Count filtrando por edificio_id={edificio_id}")
+        elif edificio_ids is not None and len(edificio_ids) > 0:
+            query = query.filter(Enlace.EdificioId.in_(edificio_ids))
+            print(f"DEBUG: Count filtrando por edificio_ids={edificio_ids}")
 
         if es_de_terceros is not None:
             query = query.filter(Enlace.EsDeTerceros == es_de_terceros)
@@ -219,6 +232,80 @@ class EnlaceRepository:
             "enlaces_por_edificio": enlaces_por_edificio
         }
 
+    def get_stats_por_cliente(self, cliente_id: int) -> Dict[str, Any]:
+        """
+        Obtiene estadísticas de enlaces para un cliente específico.
+
+        Args:
+            cliente_id: ID del cliente
+
+        Returns:
+            Diccionario con estadísticas del cliente
+        """
+        # Primero obtener los edificios del cliente
+        print(f"DEBUG: Buscando edificios para cliente_id={cliente_id}")
+        edificios_del_cliente = self.db.query(Edificio.Id)\
+            .filter(Edificio.ClienteId == cliente_id)\
+            .all()
+        
+        print(f"DEBUG: Edificios encontrados: {edificios_del_cliente}")
+        
+        edificio_ids = [e.Id for e in edificios_del_cliente]
+        
+        edificio_ids = [e.Id for e in edificios_del_cliente]
+        
+        if not edificio_ids:
+            return {
+                "total_enlaces": 0,
+                "enlaces_propios": 0,
+                "enlaces_terceros": 0,
+                "enlaces_por_edificio": {}
+            }
+        
+        print(f"DEBUG: Edificios del cliente {cliente_id}: {edificio_ids}")
+        
+        # Contar enlaces por esos edificios específicos
+        print(f"DEBUG: Contando enlaces para {len(edificio_ids)} edificios")
+        
+        total = 0
+        propios = 0
+        terceros = 0
+        
+        if edificio_ids and len(edificio_ids) > 0:
+            total = self.db.query(func.count(Enlace.Id))\
+                .filter(Enlace.EdificioId.in_(edificio_ids))\
+                .scalar()
+
+            propios = self.db.query(func.count(Enlace.Id))\
+                .filter(Enlace.EdificioId.in_(edificio_ids))\
+                .filter(Enlace.EsDeTerceros == False)\
+                .scalar()
+
+            terceros = self.db.query(func.count(Enlace.Id))\
+                .filter(Enlace.EdificioId.in_(edificio_ids))\
+                .filter(Enlace.EsDeTerceros == True)\
+                .scalar()
+
+            print(f"DEBUG: Total enlaces: {total}, propios: {propios}, terceros: {terceros}")
+
+            # Enlaces por edificio del cliente
+            enlaces_por_edificio = dict(
+                self.db.query(Edificio.Nombre, func.count(Enlace.Id))
+                    .join(Enlace, Edificio.Id == Enlace.EdificioId)
+                    .filter(Enlace.EdificioId.in_(edificio_ids))
+                    .group_by(Edificio.Nombre)
+                    .all()
+            )
+
+            print(f"DEBUG: Estadísticas completas - total={total}, propios={propios}, terceros={terceros}")
+
+        return {
+            "total_enlaces": total or 0,
+            "enlaces_propios": propios or 0,
+            "enlaces_terceros": terceros or 0,
+            "enlaces_por_edificio": enlaces_por_edificio
+        }
+
     def exists(self, enlace_id: int) -> bool:
         """
         Verifica si existe un enlace.
@@ -232,6 +319,29 @@ class EnlaceRepository:
         return self.db.query(
             self.db.query(Enlace).filter(Enlace.Id == enlace_id).exists()
         ).scalar()
+
+    def get_edificios_por_cliente(self, cliente_id: int) -> List[int]:
+        """
+        Obtiene los IDs de edificios pertenecientes a un cliente.
+
+        Args:
+            cliente_id: ID del cliente
+
+        Returns:
+            Lista de IDs de edificios del cliente
+        """
+        try:
+            edificio_query = self.db.query(Edificio.Id)\
+                .filter(Edificio.ClienteId == cliente_id)
+            
+            edificios = edificio_query.all()
+            edificio_ids = [edificio.Id for edificio in edificios]
+            
+            return edificio_ids
+            
+        except Exception as e:
+            print(f"DEBUG: Error en get_edificios_por_cliente: {e}")
+            return []
 
     def edificio_exists(self, edificio_id: int) -> bool:
         """

@@ -180,6 +180,37 @@ async def get_edificios_stats(db: Session = Depends(get_db)):
         )
 
 
+@edificio_router.get(
+    "/stats/por-cliente/{cliente_id}",
+    response_model=EdificioStatsResponse,
+    summary="Estadísticas de edificios por cliente",
+    description="Retorna estadísticas de edificios para un cliente específico"
+)
+async def get_edificios_stats_por_cliente(
+        cliente_id: int,
+        db: Session = Depends(get_db)
+):
+    """
+    Obtiene estadísticas de edificios para un cliente específico.
+
+    **Parámetros:**
+    - **cliente_id**: ID del cliente
+
+    **Retorna:**
+    - Total de edificios del cliente
+    - Edificios del cliente por provincia
+    - Edificios del cliente con/sin email
+    """
+    try:
+        service = EdificioService(db)
+        return service.get_stats_por_cliente(cliente_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener estadísticas del cliente: {str(e)}"
+        )
+
+
 # ==================== UPDATE ====================
 
 @edificio_router.put(
